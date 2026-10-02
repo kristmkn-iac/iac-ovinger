@@ -64,7 +64,7 @@ jobs:
  
     defaults:
       run:
-        working-directory: stacks/nettverk
+        working-directory: oving5/stacks/nettverk
  
     env:
       # Miljøet settes ETT sted og brukes tre. Den vanligste feilen i hele
