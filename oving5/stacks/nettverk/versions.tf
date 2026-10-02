@@ -5,7 +5,7 @@
 # =============================================================================
  
 terraform {
-  required_version = ">= 1.16.0"
+  required_version = ">= 1.15.0"
  
   # K3: blokka er TOM, og den må likevel stå der.
   #
