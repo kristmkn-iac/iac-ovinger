@@ -120,10 +120,10 @@ jobs:
       # ${{ github.workspace }} er repo-rota på runneren – stien til backend.hcl
       # er den samme uansett hva working-directory er satt til.
       - name: Init
-          run: |
+        run: |
           terraform init \
-              -backend-config="${{ github.workspace }}/oving5/shared/backend.hcl" \
-              -backend-config="key=env/$MILJO/nettverk.tfstate"
+            -backend-config="${{ github.workspace }}oving5/shared/backend.hcl" \
+            -backend-config="key=env/$MILJO/nettverk.tfstate"
  
       - name: Validate
         run: terraform validate
