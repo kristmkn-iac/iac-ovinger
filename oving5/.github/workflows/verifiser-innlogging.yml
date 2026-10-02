@@ -1,0 +1,58 @@
+# =============================================================================
+#  .github/workflows/verifiser-innlogging.yml  –  DEL A, siste steg
+# -----------------------------------------------------------------------------
+#  Den minste workflowen som finnes: logg inn, og si hvem du ble.
+#
+#  Den rører ikke Terraform, den oppretter ingenting, og den kan ikke ødelegge
+#  noe. Jobben er å svare på ett spørsmål: STOLER Azure PÅ GITHUB?
+#
+#  Virker den, er K1 og K2 innfridd og resten av oppgaven er mulig. Virker den
+#  ikke, er det HER du skal feilsøke – ikke inne i en workflow med femten steg
+#  der du ikke vet hvilket ledd som svikter.
+# =============================================================================
+ 
+name: Verifiser innlogging mot Azure
+ 
+on:
+  # workflow_dispatch og ingenting annet. En innloggingstest som kjørte ved
+  # hver push, ville brent Actions-minutter på å bekrefte noe som ikke endrer
+  # seg.
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Hvilket miljø skal testes
+        type: choice
+        options: [dev, test]
+        required: true
+ 
+# Uten id-token: write finnes det ikke noe OIDC-token å hente, og
+# azure/login har ingenting å sende. Dette er linja folk glemmer.
+permissions:
+  id-token: write
+  contents: read
+ 
+jobs:
+  verifiser:
+    runs-on: ubuntu-latest
+ 
+    # K2 i praksis: DENNE linja er det som avgjør hvilken subject-streng
+    # GitHub skriver i tokenet – repo:<org>/<repo>:environment:<miljø>.
+    # Fjerner du den, blir subject :ref:refs/heads/main, og ingen av
+    # federated credentialene dine matcher lenger.
+    environment: ${{ inputs.environment }}
+ 
+    steps:
+      - name: Logg inn i Azure
+        uses: Azure/login@v3.1.0
+        with:
+          # Ingen client secret. De tre verdiene er IDENTIFIKATORER – de sier
+          # hvem vi prøver å være, ikke at vi har lov. Beviset er OIDC-tokenet
+          # actionen bytter dem mot.
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+ 
+      # Del F, forsøk 1: sammenlign denne utskriften med `az account show`
+      # på din egen maskin. Samme abonnement, to helt ulike identiteter.
+      - name: Hvem er jeg?
+        run: az account show --output table
