@@ -2,9 +2,6 @@
 name: Terraform kontroll
 
 on:
-  push:
-    branches:
-      - oving6-kontroll
   pull_request:
     branches:
       - main
