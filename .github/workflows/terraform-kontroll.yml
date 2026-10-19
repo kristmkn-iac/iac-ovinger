@@ -1,0 +1,35 @@
+
+name: Terraform kontroll
+
+on:
+  push:
+    branches:
+      - oving6-kontroll
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  fmt-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Sjekk formatering
+        run: terraform fmt -check -recursive
+        working-directory: oving6
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Initialiser Terraform
+        run: terraform init -backend=false
+        working-directory: oving6/stacks/nettverk
+      - name: Valider Terraform
+        run: terraform validate
+        working-directory: oving6/stacks/nettverk
