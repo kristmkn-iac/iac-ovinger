@@ -1,0 +1,137 @@
+
+name: Terraform miljø
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      commit_sha:
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'prod-plan' || inputs.environment }}
+
+    defaults:
+      run:
+        working-directory: oving6/stacks/nettverk
+
+    env:
+      MILJO: ${{ inputs.environment }}
+      ARM_USE_OIDC: true
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TF_INPUT: false
+      TF_IN_AUTOMATION: true
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Logg inn i Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Hent parametere fra Key Vault
+        run: |
+          az keyvault secret show \
+            --vault-name "${{ secrets.KEYVAULT_NAME }}" \
+            --name "tfvars-$MILJO" \
+            --query value -o tsv > params.auto.tfvars
+
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="${{ github.workspace }}/oving6/shared/backend.hcl" \
+            -backend-config="key=env/$MILJO/nettverk.tfstate"
+
+      - name: Lagre Terraform-plan
+        run: terraform plan -out=tfplan
+
+      - name: Last opp planfil
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ inputs.environment }}-${{ inputs.commit_sha }}
+          path: oving6/stacks/nettverk/tfplan
+          retention-days: 1
+
+      - name: Slett parameterfil
+        if: always()
+        run: rm -f params.auto.tfvars
+
+  apply:
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    defaults:
+      run:
+        working-directory: oving6/stacks/nettverk
+
+    env:
+      MILJO: ${{ inputs.environment }}
+      ARM_USE_OIDC: true
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TF_INPUT: false
+      TF_IN_AUTOMATION: true
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Logg inn i Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Last ned lagret plan
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-${{ inputs.environment }}-${{ inputs.commit_sha }}
+          path: oving6/stacks/nettverk
+
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="${{ github.workspace }}/oving6/shared/backend.hcl" \
+            -backend-config="key=env/$MILJO/nettverk.tfstate"
+
+      - name: Apply lagret plan
+        run: terraform apply tfplan
+
+      - name: Verifiser nettverket
+        run: |
+          RG=$(terraform output -raw resource_group_name)
+          VNET=$(terraform output -raw vnet_name)
+          STATE=$(az network vnet show \
+            --resource-group "$RG" \
+            --name "$VNET" \
+            --query provisioningState -o tsv)
+          echo "$VNET i $RG: $STATE"
+          test "$STATE" = "Succeeded"
