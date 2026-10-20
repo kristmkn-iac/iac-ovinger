@@ -24,7 +24,7 @@ terraform {
 # -----------------------------------------------------------------------------
 #  Virtuelt nettverk
 # -----------------------------------------------------------------------------
-resource "azurerm_virtual_network" "vnet" {
+resource "azurerm_virtual_network" "network" {
   # K7: navnet bygges HER, ikke i miljømappa. Miljøet leverer bestanddelene
   # (var.base_name = f.eks. "oppg3-dev-tim"), og modulen vet at et vnet skal ha
   # prefikset "vnet-". Slik slipper hver miljømappe å kunne navnereglene for
@@ -58,7 +58,7 @@ resource "azurerm_subnet" "subnet" {
 
   name                 = format("snet-%s-%s", each.key, var.base_name)
   resource_group_name  = var.rg_name
-  virtual_network_name = azurerm_virtual_network.vnet.name
+  virtual_network_name = azurerm_virtual_network.network.name
 
   # cidrsubnet(prefix, newbits, netnum)
   #   prefix  – adresserommet miljøet ga oss, f.eks. 10.10.0.0/16
