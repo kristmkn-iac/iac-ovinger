@@ -9,135 +9,33 @@ on:
       - 'oving6/modules/network/**'
       - 'oving6/shared/backend.hcl'
       - '.github/workflows/deploy-nettverk.yml'
+      - '.github/workflows/terraform-miljo.yml'
   workflow_dispatch:
-    inputs:
-      environment:
-        description: Velg miljø
-        type: choice
-        options: [dev, test, prod]
-        default: dev
 
 permissions:
   id-token: write
   contents: read
 
-concurrency:
-  group: nettverk-${{ inputs.environment || 'dev' }}
-  cancel-in-progress: false
-
 jobs:
-  plan:
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment == 'prod' && 'prod-plan' || inputs.environment || 'dev' }}
+  dev:
+    uses: ./.github/workflows/terraform-miljo.yml
+    with:
+      environment: dev
+      commit_sha: ${{ github.sha }}
+    secrets: inherit
 
-    defaults:
-      run:
-        working-directory: oving6/stacks/nettverk
+  test:
+    needs: dev
+    uses: ./.github/workflows/terraform-miljo.yml
+    with:
+      environment: test
+      commit_sha: ${{ github.sha }}
+    secrets: inherit
 
-    env:
-      MILJO: ${{ inputs.environment || 'dev' }}
-      ARM_USE_OIDC: true
-      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      TF_INPUT: false
-      TF_IN_AUTOMATION: true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Logg inn i Azure
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Hent parametere fra Key Vault
-        run: |
-          az keyvault secret show \
-            --vault-name "${{ secrets.KEYVAULT_NAME }}" \
-            --name "tfvars-$MILJO" \
-            --query value -o tsv > params.auto.tfvars
-
-      - name: Terraform init
-        run: |
-          terraform init \
-            -backend-config="${{ github.workspace }}/oving6/shared/backend.hcl" \
-            -backend-config="key=env/$MILJO/nettverk.tfstate"
-
-      - name: Lagre Terraform-plan
-        run: terraform plan -out=tfplan
-
-      - name: Last opp planfil
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan
-          path: oving6/stacks/nettverk/tfplan
-          retention-days: 1
-
-      - name: Slett parameterfil
-        if: always()
-        run: rm -f params.auto.tfvars
-
-  apply:
-    needs: plan
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || 'dev' }}
-
-    defaults:
-      run:
-        working-directory: oving6/stacks/nettverk
-
-    env:
-      MILJO: ${{ inputs.environment || 'dev' }}
-      ARM_USE_OIDC: true
-      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      TF_INPUT: false
-      TF_IN_AUTOMATION: true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Logg inn i Azure
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Last ned lagret plan
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-plan
-          path: oving6/stacks/nettverk
-
-      - name: Terraform init
-        run: |
-          terraform init \
-            -backend-config="${{ github.workspace }}/oving6/shared/backend.hcl" \
-            -backend-config="key=env/$MILJO/nettverk.tfstate"
-
-      - name: Apply lagret plan
-        run: terraform apply tfplan
-
-      - name: Verifiser nettverket
-        run: |
-          RG=$(terraform output -raw resource_group_name)
-          VNET=$(terraform output -raw vnet_name)
-          STATE=$(az network vnet show \
-            --resource-group "$RG" \
-            --name "$VNET" \
-            --query provisioningState -o tsv)
-          echo "$VNET i $RG: $STATE"
-          test "$STATE" = "Succeeded"
+  prod:
+    needs: test
+    uses: ./.github/workflows/terraform-miljo.yml
+    with:
+      environment: prod
+      commit_sha: ${{ github.sha }}
+    secrets: inherit
