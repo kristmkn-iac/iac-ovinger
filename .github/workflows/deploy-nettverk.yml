@@ -14,7 +14,7 @@ on:
       environment:
         description: Velg miljø
         type: choice
-        options: [dev, test]
+        options: [dev, test, prod]
         default: dev
 
 permissions:
@@ -28,7 +28,7 @@ concurrency:
 jobs:
   plan:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || 'dev' }}
+    environment: ${{ inputs.environment == 'prod' && 'prod-plan' || inputs.environment || 'dev' }}
 
     defaults:
       run:
